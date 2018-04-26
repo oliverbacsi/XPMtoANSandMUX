@@ -1,0 +1,142 @@
+#!/usr/bin/wish
+
+package require Tk
+
+set FName "" ; set MushDesc "" ; global FName MushDesc
+set FTypes {{{XPM Images} {.xpm}}}
+array set RGB2ANS {
+  "#000000" "\033\[0;30m"   "#800000" "\033\[0;31m"   "#008000" "\033\[0;32m"   "#808000" "\033\[0;33m"
+  "#000080" "\033\[0;34m"   "#800080" "\033\[0;35m"   "#008080" "\033\[0;36m"   "#999999" "\033\[0;37m"
+  "#666666" "\033\[1;30m"   "#FF0000" "\033\[1;31m"   "#00FF00" "\033\[1;32m"   "#FFFF00" "\033\[1;33m"
+  "#0000FF" "\033\[1;34m"   "#FF00FF" "\033\[1;35m"   "#00FFFF" "\033\[1;36m"   "#FFFFFF" "\033\[1;37m"
+}
+array set RGB2MUX {
+  "#000000" "%xx"           "#800000" "%xr"           "#008000" "%xg"           "#808000" "%xy"
+  "#000080" "%xb"           "#800080" "%xm"           "#008080" "%xc"           "#999999" "%xw"
+  "#666666" "%xx%xh"        "#FF0000" "%xr%xh"        "#00FF00" "%xg%xh"        "#FFFF00" "%xy%xh"
+  "#0000FF" "%xb%xh"        "#FF00FF" "%xm%xh"        "#00FFFF" "%xc%xh"        "#FFFFFF" "%xw%xh"
+}
+global RGB2MUX RGB2ANS
+
+# call this procedure as if it was the image create ...
+proc image_create_xpm {_img_name _minus_file _img_file} {
+  if {![file readable $_img_file]} return
+  if {[lsearch -exact [image names] $_img_name] > -1} return
+  return [XPMlib::create $_img_name $_img_file]
+}
+
+namespace eval XPMlib {
+
+# Get the color of one pixel of the image
+  proc getcol {_img _X _Y} {
+  set _ret "#"
+
+    foreach {_(1) _(2) _(3)} [$_img get $_X $_Y] {}
+    for {set __ 1} {$__<=3} {incr __} {
+      switch [expr $_($__)/16] {
+        15 {append _ret F}
+        14 {append _ret E}
+        13 {append _ret D}
+        12 {append _ret C}
+        11 {append _ret B}
+        10 {append _ret A}
+        default {append _ret [expr $_($__)/16]}
+      }
+      switch [expr $_($__)%16] {
+        15 {append _ret F}
+        14 {append _ret E}
+        13 {append _ret D}
+        12 {append _ret C}
+        11 {append _ret B}
+        10 {append _ret A}
+        default {append _ret [expr $_($__)%16]}
+      }
+    }
+    return $_ret
+  }
+
+# Actually create the XPM image by reading its data file
+  proc create {_img_name _img_file} {
+
+    if {[catch {set _i_f [open $_img_file r]}]} return
+    while {([read $_i_f 1] != "\"") && (![eof $_i_f])} {}
+    set _img_info [gets $_i_f]
+    set _img_info [string range $_img_info 0 [expr [string first "\"" $_img_info] -1]]
+    if {[llength $_img_info] -4} {close $_i_f ; return }
+    foreach {_i_Xs _i_Ys _i_ColNum _i_Depth} $_img_info break
+    image create photo $_img_name -width $_i_Xs -height $_i_Ys
+    set _i_paletteID {} ; set _i_paletteCOL {}
+    while {([read $_i_f 1] != "\"") && (![eof $_i_f])} {}
+    seek $_i_f -1 current
+    for {set _i_ii 0} {$_i_ii < $_i_ColNum} {incr _i_ii} {
+      set _i_tc [string range [gets $_i_f] 1 end-2]
+      lappend _i_paletteID "[string range $_i_tc 0 [expr $_i_Depth -1]]"
+      set _i_currCOL "[lindex [string range $_i_tc 4 end] end]"
+      if {"[string range $_i_currCOL end-2 end]" == "one"} {
+        lappend _i_paletteCOL {}
+      } else {
+        lappend _i_paletteCOL $_i_currCOL
+      }
+    }
+    if {[eof $_i_f]} {close $_i_f ; return}
+    for {set _i_jj 0} {$_i_jj < $_i_Ys} {incr _i_jj} {
+      while {([read $_i_f 1] != "\"") && (![eof $_i_f])} {}
+      for {set _i_ii 0} {$_i_ii < $_i_Xs} {incr _i_ii} {
+        set _i_cid [read $_i_f $_i_Depth]
+        $_img_name put [lindex $_i_paletteCOL [lsearch -exact $_i_paletteID $_i_cid]] -to $_i_ii $_i_jj
+      }
+      read $_i_f 1
+    }
+    close $_i_f
+    return $_img_name
+  }
+}
+
+# basic check before execute
+proc try_to_do {} {
+global FName MushDesc RGB2ANS RGB2MUX
+
+  if {![string length $FName]} {  tk_messageBox -type ok -title ERROR -icon error -message "No XPM file selected !" ; return  }
+  if {![file readable $FName]} {  tk_messageBox -type ok -title ERROR -icon error -message "Selected XPM file is not readable !" ; return  }
+  if {![string length $MushDesc]} {  tk_messageBox -type ok -title WARNING -icon warning -message "There will be no description for the room, just the picture !"  }
+
+  image_create_xpm i_house -file $FName
+  set fans [open "[file rootname $FName].ans" w]
+  set fmux [open "[file rootname $FName].muxdesc" w]
+  puts -nonewline $fmux "@desc here = "
+
+  for {set j 0} {$j < [image height i_house]} {incr j} {
+    set LastCol "#gggggg"
+    for {set i 0} {$i < [image width i_house]} {incr i} {
+      set CurrCol [::XPMlib::getcol i_house $i $j]
+      if {"$CurrCol" ne "$LastCol"} {
+        puts -nonewline $fans "$RGB2ANS($CurrCol)"
+        puts -nonewline $fmux "$RGB2MUX($CurrCol)"
+      }
+      puts -nonewline $fans "@"
+      puts -nonewline $fmux  "@"
+      set LastCol $CurrCol
+    }
+    puts $fans "\033\[0m"
+    puts -nonewline $fmux "%xn%r"
+  }
+
+  if {[string length $MushDesc]} {puts $fmux "%r$MushDesc"} else {puts $fmux ""}
+  close $fmux ; close $fans
+
+  tk_messageBox -type ok -title READY -icon info -message "Conversion ready."
+  destroy . ; return
+}
+
+wm title . "Convert XPM to ANSI and MUX Description" ; wm iconname . "XPM ANS MUX"
+wm proto . WM_DELETE_WINDOW {destroy . ; return}
+pack [frame .f1] [frame .f2] [frame .f3] -in . -side top -expand yes -fill both
+pack [button .f1.bOpen -text "Open XPM" -command {set FName [tk_getOpenFile -title "Select XPM file" -filetypes $FTypes]}] \
+     [entry .f1.e -textvariable FName] \
+     -in .f1 -side left -expand yes -fill both -padx 20 -pady 20
+pack [label .f2.l -relief sunken -text "Mush @desc under the ANSI picture:"] \
+     [entry .f2.e -textvariable MushDesc] \
+     -in .f2 -side left -expand yes -fill both -padx 20 -pady 20
+pack [button .f3.bOK -text OK -command try_to_do] \
+     [button .f3.bQuit -text QUIT -command {destroy . ; return}] \
+     -in .f3 -side left -expand yes -fill none -pady 20

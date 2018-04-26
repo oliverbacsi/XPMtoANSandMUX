@@ -1,0 +1,22 @@
+GIMP Palette
+Name: VGA16
+#
+# This is a special palette to meme ansi colors.
+# Use for indexed images to be converted to ANS and MUX.
+#
+  0   0   0
+128   0   0
+  0 128   0
+128 128   0
+  0   0 128
+128   0 128
+  0 128 128
+153 153 153
+102 102 102
+255   0   0
+  0 255   0
+255 255   0
+  0   0 255
+255   0 255
+  0 255 255
+255 255 255
